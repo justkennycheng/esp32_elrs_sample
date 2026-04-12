@@ -8,19 +8,18 @@
 //CRSF通讯状态指示
 #define PIN_LED 4   //linkStatusLed, ESP32_C3绿色
 
+//ADC
+#define ADC_PIN 1  //可用于电池电压
+
 //定义LEDC通道用于硬件PWM输出. ESP32-C3支持最大6个通道
 #define LEDC_OUTPUT_PIN1 2
 #define LEDC_OUTPUT_PIN2 5
 #define LEDC_OUTPUT_PIN3 6
 #define LEDC_OUTPUT_PIN4 7
 #define LEDC_OUTPUT_PIN5 8
-
-//ADC
-#define ADC_PIN 1  //可用于电池电压
-
-// use 12 bit precision for LEDC timer
+//LEDC use 12 bit precision for LEDC timer
 #define LEDC_TIMER_BIT 12   //ESP32-C3只支持最大14bit. 	12bit是0 ~ 4095
-// LEDC frequency
+//LEDC frequency
 #define LEDC_FREQ_1 50    
 #define LEDC_FREQ_2 50    
 #define LEDC_FREQ_3 400   //400Hz 用于电调和数字舵机
@@ -30,6 +29,25 @@
 // Set up a new Serial object
 HardwareSerial crsfSerial(1);
 AlfredoCRSF crsf;
+
+//存储获取并转化后的遥控器指令
+struct RcData {
+    float roll_CMD;
+    float pitch_CMD;
+    float thr_CMD;
+    float yaw_CMD;
+    int SA_CMD;
+    int SB_CMD;
+    int SC_CMD;
+    int SD_CMD;
+    int SE_CMD;
+    float S1_CMD;
+};
+RcData rc;   // 全局变量
+
+///////////////////////////////////////////
+///////////////main//////////////////////
+/////////////////////////////////////////
 
 void setup()
 {
@@ -63,7 +81,20 @@ void loop()
     //根据CRSF通讯状态点灯
     updateLinkStatusLed();
 
+    // get Voltage of bettery
     float RxBt = analogRead(ADC_PIN) * 3.3f / 4095.0;
+
+    rc.roll_CMD = mapValue(crsf.getChannel(1), 1000, 2000, 0, 1000);   //摇杆
+    rc.pitch_CMD = mapValue(crsf.getChannel(2), 1000, 2000, 0, 1000);  //摇杆
+    rc.thr_CMD = mapValue(crsf.getChannel(3), 1000, 2000, 0, 1000);    //摇杆
+    rc.yaw_CMD = mapValue(crsf.getChannel(4), 1000, 2000, 0, 1000);    //摇杆
+    rc.SA_CMD = mapSwitch(crsf.getChannel(5), 2);  //2档
+    rc.SB_CMD = mapSwitch(crsf.getChannel(6), 3);  //3档
+    rc.SC_CMD = mapSwitch(crsf.getChannel(7), 3);  //3档
+    rc.SD_CMD = mapSwitch(crsf.getChannel(8), 2);  //2档
+    rc.SE_CMD = mapSwitch(crsf.getChannel(9), 2);  //2档
+    rc.S1_CMD = mapValue(crsf.getChannel(10), 1000, 2000, 0, 1000);  //拨轮
+    
 
 
     //将CRSF 1-6通道输出硬件LEDC PWM
@@ -71,7 +102,7 @@ void loop()
     ledcWrite(LEDC_OUTPUT_PIN2, ToDuty(crsf.getChannel(2), 1000, 2000, LEDC_FREQ_2, LEDC_TIMER_BIT, 500, 2500));
     ledcWrite(LEDC_OUTPUT_PIN3, ToDuty(crsf.getChannel(3), 1000, 2000, LEDC_FREQ_3, LEDC_TIMER_BIT, 1000, 2000)); //Thr
     ledcWrite(LEDC_OUTPUT_PIN4, ToDuty(crsf.getChannel(4), 1000, 2000, LEDC_FREQ_4, LEDC_TIMER_BIT, 500, 2500));
-    ledcWrite(LEDC_OUTPUT_PIN5, ToDuty(crsf.getChannel(6), 1000, 2000, LEDC_FREQ_5, LEDC_TIMER_BIT, 500, 2500));
+    ledcWrite(LEDC_OUTPUT_PIN5, ToDuty(crsf.getChannel(5), 1000, 2000, LEDC_FREQ_5, LEDC_TIMER_BIT, 500, 2500));
 
     //定期执行
     static uint32_t lastTick = 0;
@@ -88,6 +119,35 @@ void loop()
 
 }
 
+///////////////////////////////////////////
+///////////////Functions//////////////////
+/////////////////////////////////////////
+
+float mapValue(float x, float in_min, float in_max, float out_min, float out_max)
+{
+    if (x < in_min) x = in_min;
+    if (x > in_max) x = in_max;
+
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+int mapSwitch(uint16_t ch, int positions)
+{
+    if (positions == 2)
+    {
+        return (ch < 1500) ? 0 : 1;
+    }
+    else if (positions == 3)
+    {
+        if (ch < 1300) return 0;
+        else if (ch < 1700) return 1;
+        else return 2;
+    }
+    return -1; // 错误
+}
+
+
+
 //Use crsf.getChannel(x) to get us channel values (1-16).
 void printChannels()
 {
@@ -96,6 +156,7 @@ void printChannels()
     Serial.print(crsf.getChannel(ChannelNum));
     Serial.print(", ");
   }
+  Serial.printf("roll_CMD=%.2f  pitch_CMD=%.2f  thr_CMD=%.2f  yaw_CMD=%.2f  SA_CMD=%d  SB_CMD=%d  SC_CMD=%d  SD_CMD=%d  SE_CMD=%d  S1_CMD=%.2f", rc.roll_CMD, rc.pitch_CMD, rc.thr_CMD, rc.yaw_CMD, rc.SA_CMD, rc.SB_CMD, rc.SC_CMD, rc.SD_CMD, rc.SE_CMD, rc.S1_CMD);
   Serial.println(" ");
 }
 
@@ -123,7 +184,6 @@ void updateLinkStatusLed()
     // Perform the failsafe action
   }
 }
-
 
 uint32_t ToDuty(uint16_t Value,
                     uint16_t minValue,
