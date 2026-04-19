@@ -1,30 +1,27 @@
 #include <AlfredoCRSF.h>
 #include <HardwareSerial.h>
 
-//ESP32-C3: 我选择使用2,3,5,6,7,8,10,12作为6个LEDC输出驱动外设. 4作为通讯状态指示灯. IO1用来读取电池电压. 14,15,16,17作为SPI. 第2个串口UART1：IO18 / IO19. USB串口UART0：IO20 / IO21
-#define PIN_RX 18 //ESP32_C3暖色
-#define PIN_TX 19 //ESP32_C3冷色
+#define PIN_RX 20 
+#define PIN_TX 21 
 
 //CRSF通讯状态指示
-#define PIN_LED 4   //linkStatusLed, ESP32_C3绿色
+#define PIN_LED 8   //linkStatusLed, ESP32_C3绿色
 
 //ADC
-#define ADC_PIN 1  //可用于电池电压
+#define ADC_PIN 0  //可用于电池电压
 
 //定义LEDC通道用于硬件PWM输出. ESP32-C3支持最大6个通道
-#define LEDC_OUTPUT_PIN1 2
-#define LEDC_OUTPUT_PIN2 5
-#define LEDC_OUTPUT_PIN3 6
-#define LEDC_OUTPUT_PIN4 7
-#define LEDC_OUTPUT_PIN5 8
+#define LEDC_OUTPUT_PIN1 1
+#define LEDC_OUTPUT_PIN2 2
+#define LEDC_OUTPUT_PIN3 3
+#define LEDC_OUTPUT_PIN4 4
 //LEDC use 12 bit precision for LEDC timer
 #define LEDC_TIMER_BIT 12   //ESP32-C3只支持最大14bit. 	12bit是0 ~ 4095
 //LEDC frequency
-#define LEDC_FREQ_1 50    
+#define LEDC_FREQ_1 50    //50Hz 用于传统舵机,高频率不支持
 #define LEDC_FREQ_2 50    
 #define LEDC_FREQ_3 400   //400Hz 用于电调和数字舵机
-#define LEDC_FREQ_4 50
-#define LEDC_FREQ_5 50    //50Hz 用于传统舵机,高频率不支持
+#define LEDC_FREQ_4 50  
 
 // Set up a new Serial object
 HardwareSerial crsfSerial(1);
@@ -69,7 +66,6 @@ void setup()
   ledcAttach(LEDC_OUTPUT_PIN2, LEDC_FREQ_2, LEDC_TIMER_BIT);
   ledcAttach(LEDC_OUTPUT_PIN3, LEDC_FREQ_3, LEDC_TIMER_BIT);
   ledcAttach(LEDC_OUTPUT_PIN4, LEDC_FREQ_4, LEDC_TIMER_BIT);
-  ledcAttach(LEDC_OUTPUT_PIN5, LEDC_FREQ_5, LEDC_TIMER_BIT);
 
 }
 
@@ -102,7 +98,6 @@ void loop()
     ledcWrite(LEDC_OUTPUT_PIN2, ToDuty(crsf.getChannel(2), 1000, 2000, LEDC_FREQ_2, LEDC_TIMER_BIT, 500, 2500));
     ledcWrite(LEDC_OUTPUT_PIN3, ToDuty(crsf.getChannel(3), 1000, 2000, LEDC_FREQ_3, LEDC_TIMER_BIT, 1000, 2000)); //Thr
     ledcWrite(LEDC_OUTPUT_PIN4, ToDuty(crsf.getChannel(4), 1000, 2000, LEDC_FREQ_4, LEDC_TIMER_BIT, 500, 2500));
-    ledcWrite(LEDC_OUTPUT_PIN5, ToDuty(crsf.getChannel(5), 1000, 2000, LEDC_FREQ_5, LEDC_TIMER_BIT, 500, 2500));
 
     //定期执行
     static uint32_t lastTick = 0;
