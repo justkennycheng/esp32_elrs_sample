@@ -15,6 +15,8 @@
 #define LEDC_OUTPUT_PIN2 2
 #define LEDC_OUTPUT_PIN3 3
 #define LEDC_OUTPUT_PIN4 4
+#define LEDC_OUTPUT_PIN5 5
+
 //LEDC use 12 bit precision for LEDC timer
 #define LEDC_TIMER_BIT 12   //ESP32-C3只支持最大14bit. 	12bit是0 ~ 4095
 //LEDC frequency
@@ -22,6 +24,7 @@
 #define LEDC_FREQ_2 50    
 #define LEDC_FREQ_3 400   //400Hz 用于电调和数字舵机
 #define LEDC_FREQ_4 50  
+#define LEDC_FREQ_5 50
 
 // Set up a new Serial object
 HardwareSerial crsfSerial(1);
@@ -56,16 +59,18 @@ void setup()
 
   crsf.begin(crsfSerial);
 
+  pinMode(ADC_PIN, INPUT);
   pinMode(PIN_LED, OUTPUT);
   analogWrite(PIN_LED, 0);
 
-  analogReadResolution(12);   //set the resolution to 12 bits (0-4095)
-  //analogSetAttenuation(ADC_ATTEN_DB_11);  //0 mV ~ 2500 mV
+  analogReadResolution(12);   //默认值为12位（范围从 0 到 4095）
+  analogSetAttenuation(ADC_11db);  //ADC_11db是新版本的写法,代替旧版本的ADC_ATTEN_DB_110 mV ~ 3100 mV
 
   ledcAttach(LEDC_OUTPUT_PIN1, LEDC_FREQ_1, LEDC_TIMER_BIT);
   ledcAttach(LEDC_OUTPUT_PIN2, LEDC_FREQ_2, LEDC_TIMER_BIT);
   ledcAttach(LEDC_OUTPUT_PIN3, LEDC_FREQ_3, LEDC_TIMER_BIT);
   ledcAttach(LEDC_OUTPUT_PIN4, LEDC_FREQ_4, LEDC_TIMER_BIT);
+  ledcAttach(LEDC_OUTPUT_PIN5, LEDC_FREQ_5, LEDC_TIMER_BIT);
 
 }
 
@@ -78,7 +83,8 @@ void loop()
     updateLinkStatusLed();
 
     // get Voltage of bettery
-    float RxBt = analogRead(ADC_PIN) * 3.3f / 4095.0;
+    float RxBt = analogReadMilliVolts(ADC_PIN) / 1000.0f;   //analogReadMilliVolts根据analogReadResolution和analogSetAttenuation配置, 直接读电压; 且该函数会自动读取芯片内部 eFuse 里的校准数据进行补偿。
+    RxBt = RxBt / 0.3125;   //0.3125是我的电阻分压设置,100k/(100K+220K)
 
     rc.roll_CMD = mapValue(crsf.getChannel(1), 1000, 2000, 0, 1000);   //摇杆
     rc.pitch_CMD = mapValue(crsf.getChannel(2), 1000, 2000, 0, 1000);  //摇杆
@@ -98,19 +104,27 @@ void loop()
     ledcWrite(LEDC_OUTPUT_PIN2, ToDuty(crsf.getChannel(2), 1000, 2000, LEDC_FREQ_2, LEDC_TIMER_BIT, 500, 2500));
     ledcWrite(LEDC_OUTPUT_PIN3, ToDuty(crsf.getChannel(3), 1000, 2000, LEDC_FREQ_3, LEDC_TIMER_BIT, 1000, 2000)); //Thr
     ledcWrite(LEDC_OUTPUT_PIN4, ToDuty(crsf.getChannel(4), 1000, 2000, LEDC_FREQ_4, LEDC_TIMER_BIT, 500, 2500));
+    ledcWrite(LEDC_OUTPUT_PIN5, ToDuty(crsf.getChannel(10), 1000, 2000, LEDC_FREQ_5, LEDC_TIMER_BIT, 500, 2500));
 
     //定期执行
     static uint32_t lastTick = 0;
     if (millis() - lastTick > 500) {
         //
-        //打印各通道的值(每个通道范围1000-2000)
-        printChannels();
         //回传电池数据
         sendRxBattery(RxBt, 1.1, 11, 11);  //遥控器TELEMETRY中查看RxBt, Curr,Capa,Bat%
+
+        //打印各通道的值(每个通道范围1000-2000)
+        printChannels();
+
+        Serial.printf(" RxBt:%.2f", RxBt);
+
+        Serial.println(" ");
 
         //
         lastTick = millis();
     }
+
+    
 
 }
 
@@ -152,7 +166,7 @@ void printChannels()
     Serial.print(", ");
   }
   Serial.printf("roll_CMD=%.2f  pitch_CMD=%.2f  thr_CMD=%.2f  yaw_CMD=%.2f  SA_CMD=%d  SB_CMD=%d  SC_CMD=%d  SD_CMD=%d  SE_CMD=%d  S1_CMD=%.2f", rc.roll_CMD, rc.pitch_CMD, rc.thr_CMD, rc.yaw_CMD, rc.SA_CMD, rc.SB_CMD, rc.SC_CMD, rc.SD_CMD, rc.SE_CMD, rc.S1_CMD);
-  Serial.println(" ");
+  
 }
 
 static void sendRxBattery(float voltage, float current, float capacity, float remaining)
